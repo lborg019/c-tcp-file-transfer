@@ -113,10 +113,11 @@ int main(int argc, char* argv[])
 		  memset(&buffer, 0, sizeof(buffer));
 		  int remainingData = 0;
 		  ssize_t len;
-		  //char address[256] = "./folder-local/";
-		  //strcat(address, fileName);
+		  char path[256] = "./folder-local/";
+		  strcat(path, fileName);
+		  printf("path: %s", path);
 		  FILE* fp;
-		  fp = fopen(fileName, "wb");//overwrite if existing
+		  fp = fopen(path, "wb");//overwrite if existing
 		  							//create if not
 		  remainingData = fileSize;
 		  //while(((len = recv(sockfd, buffer, 256, 0)) > 0) && (remainingData > 0))
