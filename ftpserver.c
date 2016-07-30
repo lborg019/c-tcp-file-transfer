@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
 					}
 					
 					//user called ls-remote
-					if(strcmp(msgBuffer, "ls-remote") == 0)
+					else if(strcmp(msgBuffer, "ls-remote") == 0)
 					{
 						//clean buffer with request
 						memset(msgBuffer, 0, sizeof(msgBuffer));
@@ -171,9 +171,9 @@ int main(int argc, char *argv[])
 					//user calls 'get file' (download)
 					//Send user a file!
 					else if(msgBuffer[0] == 'g' &&
-							msgBuffer[1] == 'e' &&
-							msgBuffer[2] == 't' &&
-							msgBuffer[3] == ' ')
+						msgBuffer[1] == 'e' &&
+						msgBuffer[2] == 't' &&
+						msgBuffer[3] == ' ')
 					{
 						printf("User called get\n");
 						
@@ -273,20 +273,29 @@ int main(int argc, char *argv[])
 					//user calls 'put file'
 					//Receive file from user! (upload)
 					else if(msgBuffer[0] == 'p' &&
-							msgBuffer[1] == 'u' &&
-							msgBuffer[2] == 't' &&
-							msgBuffer[3] == ' ')
+						msgBuffer[1] == 'u' &&
+						msgBuffer[2] == 't' &&
+						msgBuffer[3] == ' ')
 					{
 						printf("User called put\n");
 						
 						//we immediately acknowledge the client we got the file name
 						b = send(newsockfd, msgBuffer, sizeof(msgBuffer), 0);
+                                                if(b < 0)
+                                                        printf("Error sending file ACK\n");
 
 						//we receive on the fileSizeBuffer
 						memset(&fileSizeBuffer, 0, sizeof(fileSizeBuffer));
-						recv(newsockfd, fileSizeBuffer, sizeof(fileSizeBuffer), 0);
-
+						b = recv(newsockfd, fileSizeBuffer, sizeof(fileSizeBuffer), 0);
+                                                if(b < 0)
+                                                        printf("Error receiving file size\n");   
 						printf("size should be: %s\n", fileSizeBuffer);
+
+						//we send an ACK for file size
+                                                b = send(newsockfd, fileSizeBuffer, sizeof(fileSizeBuffer), 0);
+                                                if(b < 0)
+                                                        printf("Error sending ACK for file size\n");
+
 						//we catch the file name
 						char fileName[256];
 						memset(&fileName, 0, sizeof(fileName));
@@ -299,18 +308,7 @@ int main(int argc, char *argv[])
 							fileName[j] = msgBuffer[i];
 							j++;
 						}
-						printf("before msgBuffer is: %s\n", msgBuffer);
-
-						memset(&msgBuffer, 0, sizeof(msgBuffer));
-						printf("after msgBuffer is: %s\n", msgBuffer);
-
-						//catch file size:
-						//memset(&msgBuffer, 0, sizeof(msgBuffer));
-						//recv(newsockfd, msgBuffer, sizeof(msgBuffer), 0);
-						//printf("file size is always: %s", msgBuffer);
 						fileSize = atoi(fileSizeBuffer);
-						//fileSize = atoi(msgBuffer);
-						//figure out htonl / ntohl
 						
 						//print file name and size:
 						printf("File: '%s' (%d bytes)\n", fileName, fileSize);
@@ -319,30 +317,44 @@ int main(int argc, char *argv[])
 						memset(&msgBuffer, 0, sizeof(msgBuffer));
 						int remainingData = 0;
 						ssize_t len;
-						//char address[256];
-						//memset(&address, 0, sizeof(address));
-						//address = "./folder-local/";
-						//we open a file with the name
+						char path[256] = "./folder-remote/";
+                                                strcat(path, fileName);
+                                                printf("path: %s\n", path);
 						FILE* fileprocessor;
-						fileprocessor = fopen(fileName, "w"); //overwrite if existing
-												   //create if not
+						fileprocessor = fopen(path, "wb"); //overwrite if existing
+										   //create if not
 						remainingData = fileSize;
 						//while(((len = recv(newsockfd, msgBuffer, 256, 0)) > 0) && (remainingData > 0))
 						while(remainingData != 0)
 						{
-							len = recv(newsockfd, msgBuffer, 256, 0);
-							fwrite(msgBuffer, sizeof(char), len, fileprocessor);
-							remainingData -= len;
-							printf("Received %lu bytes, expecting: %d bytes\n",
-									len, remainingData);
+                                                        if(remainingData < 256)
+                                                        {
+                                                                len = recv(newsockfd, msgBuffer, remainingData, 0);
+                                                                fwrite(msgBuffer, sizeof(char), len, fileprocessor);
+                                                                remainingData -= len;
+                                                                printf("Received %lu bytes, expecting %d bytes\n", len, remainingData);
+								break;
+                                                        }
+                                                        else
+                                                        {
+                                                                 len = recv(newsockfd, msgBuffer, 256, 0); //256
+                                                                 fwrite(msgBuffer, sizeof(char), len, fileprocessor);
+                                                                 remainingData -= len;
+                                                                 printf("Received %lu bytes, expecting: %d bytes\n", len, remainingData);
+                                                        }
 						}
 						fclose(fileprocessor);
-						//memset(&msgBuffer, 0 , sizeof(msgBuffer));
+                                                b = recv(newsockfd, msgBuffer, 256, 0); //receive bizarre lingering packet.
+                                                //clean buffer
+						memset(&msgBuffer, 0 , sizeof(msgBuffer));
 					}//end upload section
 					else
 					{	
 						//revert(msgBuffer);
+						//memset(&msgBuffer, 0, sizeof(msgBuffer));
 						b = send(newsockfd, msgBuffer, sizeof(msgBuffer), 0);
+						//b = recv(newsockfd, msgBuffer, sizeof(msgBuffer), 0);
+                                                //b = recv(sockfd, msgBuffer, sizeof(msgBuffer), 0);
 						if(b < 0)
 							syserr("can't send to server");
 						printf("send message...%s\n", msgBuffer);

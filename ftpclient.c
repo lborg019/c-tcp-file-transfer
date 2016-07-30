@@ -146,15 +146,19 @@ int main(int argc, char* argv[])
 		  //clean buffer
 		  memset(&buffer, 0, sizeof(buffer));
 	  }
-	  //user calls upload
+	  //user calls 'put file'
+          //send file to server! (upload)
 	  else if(buffer[0] == 'p' &&
-			  buffer[1] == 'u' &&
-			  buffer[2] == 't' &&
-			  buffer[3] == ' ')
+	          buffer[1] == 'u' &&
+		  buffer[2] == 't' &&
+		  buffer[3] == ' ')
 	  {
 		  printf("User requested an upload\n");
 
-		  int fp; //file processor
+                  //we wait for the server's ACK
+                  n = recv(sockfd, buffer, sizeof(buffer), 0);
+                  if(n < 0)
+                      printf("Server didn't acknowledge name");
 
 		  //parse the string
 		  int j = 0;
@@ -167,62 +171,79 @@ int main(int argc, char* argv[])
 		  strcat(address, buffer); //get file path
 
 		  //open file path
-		  fp = open(address, O_RDONLY); //filename, O_RDONLY
-		  if(fp == -1)
-		  { 
+                  FILE* fp;
+		  fp = fopen(address, "rb"); //filename, read bytes
+		  if(fp == NULL)
 			  printf("error opening file in: %s\n", buffer);
-			  //exit(0);
-		  }
 		  printf("File opened successfully!\n");
 
 		  //we will attempt to read the file
 		  //in chunks of 256 bytes and send!
 
 		  //figure out file size:
-		  struct stat st;
-		  if(fstat(fp, &st) < 0) //figure out file size
-		  {
-			  printf("Error determining file size\n");
-		  }
-		  
-		  printf("File size: %lu bytes\n", st.st_size);
+		  int file_size = 0;
+		  if(fseek(fp, 0, SEEK_END) != 0)
+			printf("Error determining file size\n");
+
+		  file_size = ftell(fp);
+		  rewind(fp);
+		  printf("File size: %lu bytes\n", file_size);
 		  
 		  //pass this size to a buffer in order to send it:
+                  //no need for host to network long, we're passing char array
 		  memset(&fileSizeBuffer, 0, sizeof(fileSizeBuffer));
-		  sprintf(fileSizeBuffer, "%d", (int)st.st_size);
-
-		  //wait for server before we send size
-		  memset(&buffer, 0, sizeof(buffer));
-		  n = recv(sockfd, buffer, sizeof(buffer), 0);
-		  if(n < 0)
-			  printf("Server didn acknowledge name");
-		  else
-		  {
+		  sprintf(fileSizeBuffer, "%d", file_size);
+		  //memset(&buffer, 0, sizeof(buffer));
 		  //send file size:
 		  n = send(sockfd, fileSizeBuffer, sizeof(fileSizeBuffer), 0);
 		  if(n < 0)
-			  printf("Error sending handshake\n");
+			  printf("Error sending file size information\n"); 
 		  
-		  printf("User sent %d bytes with size information.\n", n);
-		  }
-		  
-		  //now we send the file data:
-		  off_t offset = 0;
-		  int bytesSent = 0;
-		  int bytesRemaining = st.st_size;
-		  
-		  while(bytesRemaining != 0)
-		  {
-			  bytesSent = send(sockfd, fp, 256, 0);
-		      //bytesSent = sendfile(sockfd, fp, &offset, 256);
-			  printf("I.User sent %d bytes; offset: %d, remaining: %d\n", bytesSent, (int)offset, bytesRemaining);
-			  bytesRemaining -= bytesSent;
-			  printf("II.User sent %d bytes; offset: %d, remaining: %d\n", bytesSent, (int)offset, bytesRemaining);
-		  }
-		  printf("File sent.\n");
-		  memset(&buffer, 0, sizeof(buffer));
-		  memset(&fileSizeBuffer, 0, sizeof(fileSizeBuffer));  
-	}//put ends here
+		  //receive ACK for file size:
+                  //give enough time for server to get
+                  //file size we just sent
+                  n = recv(sockfd, fileSizeBuffer, sizeof(fileSizeBuffer), 0);
+                  if(n < 0)
+                          printf("Error receiving handshake");
+                  
+		  //we create a byte array:
+                  char byteArray[256];
+                  memset(&byteArray, 0, sizeof(byteArray));
+ 
+                  int buffRead = 0;
+                  int bytesRemaining = file_size;
+
+                  //while there are still bytes to be sent:
+                  while(bytesRemaining != 0)
+                  {
+                       //we fill in the byte array
+                       //with slabs smaller than 256 bytes:
+                       if(bytesRemaining < 256)
+                       {
+                           buffRead = fread(byteArray, 1, bytesRemaining, fp);
+                           bytesRemaining = bytesRemaining - buffRead;
+                           n = send(sockfd, byteArray, 256, 0);
+                           if(n < 0)
+                                   printf("Error sending small slab\n");
+
+                           printf("sent %d slab\n", buffRead);
+                       }
+                       //for slabs of 256 bytes:
+                       else
+                       {
+                           buffRead = fread(byteArray, 1, 256, fp);
+                           bytesRemaining = bytesRemaining - buffRead;
+                           n = send(sockfd, byteArray, 256, 0);
+                           if(n < 0)
+                                   printf("Error sending slab\n");
+                           printf("sent %d slab\n", buffRead);
+                       }
+                  }
+                  printf("File sent!\n");
+                  //clean buffers
+                  memset(&buffer, 0, sizeof(buffer));
+                  memset(&byteArray, 0, sizeof(byteArray));
+	  }
 	  //user calls ls-local
 	  else if(strcmp(buffer, "ls-local") == 0)
 	  {
