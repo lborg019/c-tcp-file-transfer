@@ -18,9 +18,8 @@ Here's a list with the possible commands:
 - `~$ put filename.extension` upload local file to server
 - `~$ exit` exit gracefully
 
-For the sake of the example, client's files are located in ./folder-local/
-server's files are located in ./folder-remote/. Feel free to change these
-according to your needs.</br>
+For the sake of the example, client files are located in ./folder-local/</br>Server files are located in ./folder-remote/. Feel free to change these
+according to your needs as long as your folders are not root access only.</br>
 Should work in any Unix system
 
 ### How it works: ###
